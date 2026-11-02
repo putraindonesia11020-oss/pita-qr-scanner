@@ -153,9 +153,41 @@
   if (processing) return;
 
   processing = true;
-  showMessage("QR BERHASIL TERBACA: " + decodedText, true);
 
-  document.getElementById("stopButton").disabled = false;
+  const sessionId = "SESI-001";
+  const studentId = decodedText.trim();
+
+  showMessage("QR terbaca: " + studentId + ". Mengirim absensi...", true);
+
+  fetch(
+    "https://script.google.com/macros/s/AKfycbwiHCYWH3NmNrcqXvma1gGQtONvGq2CEQUZMpa_LSXyiltIwoeaHQ28swdYpK-rNJ07XQ/exec",
+    {
+      method: "POST",
+      mode: "no-cors",
+      headers: {
+        "Content-Type": "text/plain;charset=utf-8"
+      },
+      body: JSON.stringify({
+        sessionId: sessionId,
+        studentId: studentId
+      })
+    }
+  )
+  .then(function() {
+    showMessage(
+      "Permintaan absensi dikirim untuk " + studentId +
+      ". Periksa DB_ABSENSI untuk memastikan tercatat.",
+      true
+    );
+  })
+  .catch(function(error) {
+    showMessage("Gagal mengirim absensi: " + error.message, false);
+  })
+  .finally(function() {
+    setTimeout(function() {
+      processing = false;
+    }, 3000);
+  });
 }
   </script>
 </body>
