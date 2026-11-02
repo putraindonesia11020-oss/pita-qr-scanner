@@ -150,18 +150,13 @@
     }
 
     function onScanSuccess(decodedText) {
-      if (processing) return;
+  if (processing) return;
 
-      processing = true;
-      showMessage("QR terbaca: " + decodedText, true);
+  processing = true;
+  showMessage("QR BERHASIL TERBACA: " + decodedText, true);
 
-      // Tahap berikutnya: hubungkan hasil QR ke absensi PITA.
-      stopScanner();
-
-      setTimeout(function() {
-        processing = false;
-      }, 2000);
-    }
+  document.getElementById("stopButton").disabled = false;
+}
   </script>
 </body>
 </html>
