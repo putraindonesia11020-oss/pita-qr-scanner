@@ -4,7 +4,6 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>PITA QR Scanner</title>
-
   <script src="https://unpkg.com/html5-qrcode"></script>
 
   <style>
@@ -37,6 +36,22 @@
       box-shadow: 0 2px 8px rgba(0,0,0,0.06);
     }
 
+    label {
+      display: block;
+      margin-top: 12px;
+      font-weight: bold;
+    }
+
+    select {
+      width: 100%;
+      padding: 12px;
+      margin-top: 6px;
+      border: 1px solid #cbd2d9;
+      border-radius: 8px;
+      font-size: 16px;
+      background: white;
+    }
+
     button {
       width: 100%;
       padding: 14px;
@@ -57,6 +72,15 @@
     #reader {
       width: 100%;
       margin-top: 16px;
+    }
+
+    #studentInfo {
+      display: none;
+      margin-top: 12px;
+      padding: 12px;
+      border-radius: 8px;
+      background: #e7f5ff;
+      color: #164e63;
     }
 
     #message {
@@ -88,7 +112,17 @@
     </div>
 
     <div class="card">
-      <button id="startButton" onclick="startScanner()">
+      <label for="dojangSelect">Pilih Dojang</label>
+      <select id="dojangSelect" onchange="loadSessions()">
+        <option value="">Memuat dojang...</option>
+      </select>
+
+      <label for="sessionSelect">Pilih Sesi Latihan</label>
+      <select id="sessionSelect" disabled>
+        <option value="">Pilih dojang terlebih dahulu</option>
+      </select>
+
+      <button id="startButton" onclick="startScanner()" disabled>
         Mulai Scanner
       </button>
 
@@ -97,11 +131,15 @@
       </button>
 
       <div id="reader"></div>
+      <div id="studentInfo"></div>
       <div id="message"></div>
     </div>
   </div>
 
   <script>
+    const SCRIPT_URL =
+      "https://script.google.com/macros/s/AKfycbwWPoFzYp74HXiJG2FHwPzK4bMWqMn7ak-fGUefehhMP9Gt_T38NDTdMIRV6xfYLkSN0g/exec";
+
     let scanner = null;
     let processing = false;
 
@@ -111,7 +149,133 @@
       box.className = success ? "success" : "error";
     }
 
+    function jsonpRequest(params) {
+      return new Promise(function(resolve, reject) {
+        const callbackName =
+          "pitaCallback_" + Date.now() + "_" +
+          Math.floor(Math.random() * 100000);
+
+        const script = document.createElement("script");
+        const query = new URLSearchParams(params);
+        query.set("callback", callbackName);
+
+        const timeout = setTimeout(function() {
+          cleanup();
+          reject(new Error("Server tidak merespons."));
+        }, 15000);
+
+        function cleanup() {
+          clearTimeout(timeout);
+          delete window[callbackName];
+          if (script.parentNode) script.parentNode.removeChild(script);
+        }
+
+        window[callbackName] = function(data) {
+          cleanup();
+          resolve(data);
+        };
+
+        script.onerror = function() {
+          cleanup();
+          reject(new Error("Gagal mengambil data dari server."));
+        };
+
+        script.src = SCRIPT_URL + "?" + query.toString();
+        document.body.appendChild(script);
+      });
+    }
+
+    function loadDojangs() {
+      const select = document.getElementById("dojangSelect");
+
+      jsonpRequest({ action: "dojangs" })
+        .then(function(dojangs) {
+          select.innerHTML = '<option value="">-- Pilih Dojang --</option>';
+
+          dojangs.forEach(function(dojang) {
+            const option = document.createElement("option");
+            option.value = dojang.id;
+            option.textContent = dojang.nama;
+            select.appendChild(option);
+          });
+
+          showMessage("Daftar dojang berhasil dimuat.", true);
+        })
+        .catch(function(error) {
+          select.innerHTML = '<option value="">Gagal memuat dojang</option>';
+          showMessage(error.message, false);
+        });
+    }
+
+    function loadSessions() {
+      const dojangId = document.getElementById("dojangSelect").value;
+      const sessionSelect = document.getElementById("sessionSelect");
+      const startButton = document.getElementById("startButton");
+
+      sessionSelect.innerHTML = '<option value="">Memuat sesi...</option>';
+      sessionSelect.disabled = true;
+      startButton.disabled = true;
+
+      if (!dojangId) {
+        sessionSelect.innerHTML =
+          '<option value="">Pilih dojang terlebih dahulu</option>';
+        return;
+      }
+
+      jsonpRequest({ action: "sessions" })
+        .then(function(sessions) {
+          const selectedDojang =
+            document.getElementById("dojangSelect")
+              .selectedOptions[0].textContent;
+
+          const filtered = sessions.filter(function(session) {
+            return session.dojang.trim().toLowerCase() ===
+              selectedDojang.trim().toLowerCase();
+          });
+
+          sessionSelect.innerHTML =
+            '<option value="">-- Pilih Sesi --</option>';
+
+          filtered.forEach(function(session) {
+            const option = document.createElement("option");
+            option.value = session.id;
+            option.textContent =
+              session.tanggal + " | " +
+              session.mulai + "–" + session.selesai;
+            sessionSelect.appendChild(option);
+          });
+
+          sessionSelect.disabled = false;
+          showMessage(
+            filtered.length
+              ? "Pilih sesi latihan yang akan diabsen."
+              : "Belum ada sesi aktif untuk dojang ini.",
+            filtered.length > 0
+          );
+        })
+        .catch(function(error) {
+          sessionSelect.innerHTML =
+            '<option value="">Gagal memuat sesi</option>';
+          showMessage(error.message, false);
+        });
+    }
+
+    document.getElementById("sessionSelect").addEventListener(
+      "change",
+      function() {
+        document.getElementById("startButton").disabled =
+          !this.value || !!scanner;
+      }
+    );
+
     function startScanner() {
+      const sessionId = document.getElementById("sessionSelect").value;
+
+      if (!sessionId) {
+        showMessage("Pilih sesi latihan terlebih dahulu.", false);
+        return;
+      }
+
       if (scanner) return;
 
       scanner = new Html5Qrcode("reader");
@@ -125,10 +289,13 @@
       .then(function() {
         document.getElementById("startButton").disabled = true;
         document.getElementById("stopButton").disabled = false;
+        document.getElementById("dojangSelect").disabled = true;
+        document.getElementById("sessionSelect").disabled = true;
         showMessage("Kamera aktif. Arahkan ke QR siswa.", true);
       })
       .catch(function(error) {
         scanner = null;
+        document.getElementById("startButton").disabled = false;
         showMessage("Kamera gagal dibuka: " + error, false);
       });
     }
@@ -140,8 +307,11 @@
         .then(function() {
           scanner.clear();
           scanner = null;
-          document.getElementById("startButton").disabled = false;
+          document.getElementById("startButton").disabled =
+            !document.getElementById("sessionSelect").value;
           document.getElementById("stopButton").disabled = true;
+          document.getElementById("dojangSelect").disabled = false;
+          document.getElementById("sessionSelect").disabled = false;
           showMessage("Kamera dihentikan.", true);
         })
         .catch(function(error) {
@@ -150,45 +320,65 @@
     }
 
     function onScanSuccess(decodedText) {
-  if (processing) return;
+      if (processing) return;
 
-  processing = true;
+      processing = true;
 
-  const sessionId = "SESI-001";
-  const studentId = decodedText.trim();
+      const sessionId = document.getElementById("sessionSelect").value;
+      const studentId = decodedText.trim();
+      const infoBox = document.getElementById("studentInfo");
 
-  showMessage("QR terbaca: " + studentId + ". Mengirim absensi...", true);
+      infoBox.style.display = "block";
+      infoBox.textContent = "Mencari data siswa " + studentId + "...";
 
-  fetch(
-    "https://script.google.com/macros/s/AKfycbwWPoFzYp74HXiJG2FHwPzK4bMWqMn7ak-fGUefehhMP9Gt_T38NDTdMIRV6xfYLkSN0g/exec",
-    {
-      method: "POST",
-      mode: "no-cors",
-      headers: {
-        "Content-Type": "text/plain;charset=utf-8"
-      },
-      body: JSON.stringify({
-        sessionId: sessionId,
+      jsonpRequest({
+        action: "student",
         studentId: studentId
       })
+      .then(function(student) {
+        if (!student.success) {
+          throw new Error(student.message || "Data siswa tidak ditemukan.");
+        }
+
+        infoBox.textContent =
+          "Nama: " + student.nama +
+          " | ID: " + student.id +
+          " | Dojang: " + student.dojang;
+
+        showMessage(
+          "QR " + student.nama + " terbaca. Mengirim absensi...",
+          true
+        );
+
+        return fetch(SCRIPT_URL, {
+          method: "POST",
+          mode: "no-cors",
+          headers: {
+            "Content-Type": "text/plain;charset=utf-8"
+          },
+          body: JSON.stringify({
+            sessionId: sessionId,
+            studentId: studentId
+          })
+        }).then(function() {
+          showMessage(
+            "Permintaan absensi " + student.nama +
+            " telah dikirim. Periksa DB_ABSENSI untuk memastikan tercatat.",
+            true
+          );
+        });
+      })
+      .catch(function(error) {
+        showMessage(error.message, false);
+      })
+      .finally(function() {
+        setTimeout(function() {
+          processing = false;
+        }, 3000);
+      });
     }
-  )
-  .then(function() {
-    showMessage(
-      "Permintaan absensi dikirim untuk " + studentId +
-      ". Periksa DB_ABSENSI untuk memastikan tercatat.",
-      true
-    );
-  })
-  .catch(function(error) {
-    showMessage("Gagal mengirim absensi: " + error.message, false);
-  })
-  .finally(function() {
-    setTimeout(function() {
-      processing = false;
-    }, 3000);
-  });
-}
+
+    loadDojangs();
   </script>
 </body>
 </html>
