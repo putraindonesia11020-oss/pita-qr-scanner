@@ -208,58 +208,58 @@
     }
 
     function loadSessions() {
-      const dojangId = document.getElementById("dojangSelect").value;
-      const sessionSelect = document.getElementById("sessionSelect");
-      const startButton = document.getElementById("startButton");
+  const dojangId = document.getElementById("dojangSelect").value;
+  const sessionSelect = document.getElementById("sessionSelect");
+  const startButton = document.getElementById("startButton");
 
-      sessionSelect.innerHTML = '<option value="">Memuat sesi...</option>';
-      sessionSelect.disabled = true;
-      startButton.disabled = true;
+  sessionSelect.innerHTML =
+    '<option value="">Menyiapkan sesi hari ini...</option>';
+  sessionSelect.disabled = true;
+  startButton.disabled = true;
 
-      if (!dojangId) {
-        sessionSelect.innerHTML =
-          '<option value="">Pilih dojang terlebih dahulu</option>';
-        return;
+  if (!dojangId) {
+    sessionSelect.innerHTML =
+      '<option value="">Pilih dojang terlebih dahulu</option>';
+    return;
+  }
+
+  jsonpRequest({
+    action: "todaySession",
+    dojangId: dojangId
+  })
+    .then(function(session) {
+      if (!session.success || !session.id) {
+        throw new Error(
+          session.message || "Sesi hari ini gagal disiapkan."
+        );
       }
 
-      jsonpRequest({ action: "sessions" })
-        .then(function(sessions) {
-          const selectedDojang =
-            document.getElementById("dojangSelect")
-              .selectedOptions[0].textContent;
+      sessionSelect.innerHTML = "";
 
-          const filtered = sessions.filter(function(session) {
-            return session.dojang.trim().toLowerCase() ===
-              selectedDojang.trim().toLowerCase();
-          });
+      const option = document.createElement("option");
+      option.value = session.id;
+      option.textContent =
+        session.tanggal + " | " +
+        session.mulai + "–" + session.selesai;
 
-          sessionSelect.innerHTML =
-            '<option value="">-- Pilih Sesi --</option>';
+      sessionSelect.appendChild(option);
+      sessionSelect.value = session.id;
+      sessionSelect.disabled = false;
+      startButton.disabled = false;
 
-          filtered.forEach(function(session) {
-            const option = document.createElement("option");
-            option.value = session.id;
-            option.textContent =
-              session.tanggal + " | " +
-              session.mulai + "–" + session.selesai;
-            sessionSelect.appendChild(option);
-          });
-
-          sessionSelect.disabled = false;
-          showMessage(
-            filtered.length
-              ? "Pilih sesi latihan yang akan diabsen."
-              : "Belum ada sesi aktif untuk dojang ini.",
-            filtered.length > 0
-          );
-        })
-        .catch(function(error) {
-          sessionSelect.innerHTML =
-            '<option value="">Gagal memuat sesi</option>';
-          showMessage(error.message, false);
-        });
-    }
-
+      showMessage(
+        session.existing
+          ? "Sesi hari ini sudah tersedia."
+          : "Sesi hari ini berhasil dibuat otomatis.",
+        true
+      );
+    })
+    .catch(function(error) {
+      sessionSelect.innerHTML =
+        '<option value="">Gagal menyiapkan sesi</option>';
+      showMessage(error.message, false);
+    });
+}
     document.getElementById("sessionSelect").addEventListener(
       "change",
       function() {
