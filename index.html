@@ -108,7 +108,7 @@
   <div class="container">
     <div class="header">
       <h2>PITA QR SCANNER</h2>
-      <div>Scanner Absensi Siswa</div>
+      <div>Scanner Absensi Siswa & Pelatih</div>
     </div>
 
     <div class="card">
@@ -291,7 +291,7 @@
         document.getElementById("stopButton").disabled = false;
         document.getElementById("dojangSelect").disabled = true;
         document.getElementById("sessionSelect").disabled = true;
-        showMessage("Kamera aktif. Arahkan ke QR siswa.", true);
+        showMessage("Kamera aktif. Arahkan ke QR siswa atau pelatih.", true);
       })
       .catch(function(error) {
         scanner = null;
@@ -320,63 +320,67 @@
     }
 
     function onScanSuccess(decodedText) {
-      if (processing) return;
+  if (processing) return;
 
-      processing = true;
+  processing = true;
 
-      const sessionId = document.getElementById("sessionSelect").value;
-      const studentId = decodedText.trim();
-      const infoBox = document.getElementById("studentInfo");
+  const sessionId = document.getElementById("sessionSelect").value;
+  const personId = decodedText.trim();
+  const infoBox = document.getElementById("studentInfo");
 
-      infoBox.style.display = "block";
-      infoBox.textContent = "Mencari data siswa " + studentId + "...";
+  infoBox.style.display = "block";
+  infoBox.textContent = "Mencari data ID " + personId + "...";
 
-      jsonpRequest({
-        action: "student",
-        studentId: studentId
-      })
-      .then(function(student) {
-        if (!student.success) {
-          throw new Error(student.message || "Data siswa tidak ditemukan.");
-        }
-
-        infoBox.textContent =
-          "Nama: " + student.nama +
-          " | ID: " + student.id +
-          " | Dojang: " + student.dojang;
-
-        showMessage(
-          "QR " + student.nama + " terbaca. Mengirim absensi...",
-          true
-        );
-
-        return fetch(SCRIPT_URL, {
-          method: "POST",
-          mode: "no-cors",
-          headers: {
-            "Content-Type": "text/plain;charset=utf-8"
-          },
-          body: JSON.stringify({
-            sessionId: sessionId,
-            studentId: studentId
-          })
-        }).then(function() {
-          showMessage(
-            "Permintaan absensi " + student.nama +
-            " telah dikirim. Periksa DB_ABSENSI untuk memastikan tercatat.",
-            true
-          );
-        });
-      })
-      .catch(function(error) {
-        showMessage(error.message, false);
-      })
-      .finally(function() {
-        setTimeout(function() {
-          processing = false;
-        }, 3000);
-      });
+  jsonpRequest({
+    action: "student",
+    studentId: personId
+  })
+  .then(function(person) {
+    if (!person.success) {
+      throw new Error(person.message || "Data tidak ditemukan.");
     }
+
+    const jenis = person.jenis || "SISWA";
+
+    infoBox.textContent =
+      "Jenis: " + jenis +
+      " | Nama: " + person.nama +
+      " | ID: " + person.id +
+      (person.dojang ? " | Dojang: " + person.dojang : "");
+
+    showMessage(
+      "QR " + jenis.toLowerCase() + " " + person.nama +
+      " terbaca. Mengirim absensi...",
+      true
+    );
+
+    return fetch(SCRIPT_URL, {
+      method: "POST",
+      mode: "no-cors",
+      headers: {
+        "Content-Type": "text/plain;charset=utf-8"
+      },
+      body: JSON.stringify({
+        sessionId: sessionId,
+        studentId: personId
+      })
+    }).then(function() {
+      showMessage(
+        "Permintaan absensi " + jenis.toLowerCase() + " " +
+        person.nama + " telah dikirim. Periksa DB_ABSENSI untuk memastikan tercatat.",
+        true
+      );
+    });
+  })
+  .catch(function(error) {
+    showMessage(error.message, false);
+  })
+  .finally(function() {
+    setTimeout(function() {
+      processing = false;
+    }, 3000);
+  });
+}
 
     loadDojangs();
   </script>
